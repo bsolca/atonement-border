@@ -8,114 +8,101 @@ local CreateFrame = CreateFrame
 local Settings = Settings
 
 --------------------------------------------------------------------------------
--- Color Picker Helper (polling approach - bypasses flaky callback system)
+-- Color Picker Helper (callback-based, no polling)
 --------------------------------------------------------------------------------
 
-local pickerState = nil
-local pollFrame = CreateFrame("Frame")
-pollFrame:Hide()
+-- Active picker state: stores everything needed for the current color pick operation
+local activeColorPick = nil
 
-local function GetPickerRGBA()
-    local r, g, b = ColorPickerFrame:GetColorRGB()
-    local a = 1
-    if ColorPickerFrame.GetColorAlpha then
-        a = ColorPickerFrame:GetColorAlpha()
-    elseif OpacitySliderFrame then
-        a = 1 - (OpacitySliderFrame:GetValue() or 0)
-    end
-    return r, g, b, a
-end
+local function OpenColorPicker(colorKey, swatchFrame, currentColor)
+    local r = currentColor.r or 1
+    local g = currentColor.g or 1
+    local b = currentColor.b or 1
+    local a = currentColor.a or 1
 
-local function UpdateFromPicker()
-    if not pickerState then return end
-
-    local r, g, b, a = GetPickerRGBA()
-
-    -- Only update if color changed
-    local last = pickerState.lastColor
-    if last and last.r == r and last.g == g and last.b == b and last.a == a then
-        return
-    end
-    pickerState.lastColor = { r = r, g = g, b = b, a = a }
-
-    -- Update config and save
-    local colors = AB:GetConfig("colors")
-    if colors then
-        colors[pickerState.key] = { r = r, g = g, b = b, a = a }
-        AB:SetConfig("colors", colors)
-    end
-
-    -- Update swatch
-    if pickerState.swatch and pickerState.swatch.colorTex then
-        pickerState.swatch.colorTex:SetColorTexture(r, g, b, a)
-    end
-end
-
-pollFrame:SetScript("OnUpdate", function(self)
-    if not ColorPickerFrame:IsShown() then
-        UpdateFromPicker()  -- Capture final color before clearing state
-        self:Hide()
-        pickerState = nil
-        AB:UpdateAllFrames()
-        if AB.optionsPanelFrame and AB.optionsPanelFrame:IsShown() then
-            AB.optionsPanelFrame:RefreshFromConfig()
-        end
-        return
-    end
-    UpdateFromPicker()
-end)
-
-local function OnCancel()
-    if not pickerState then return end
-
-    local orig = pickerState.original
-    local colors = AB:GetConfig("colors")
-    if colors then
-        colors[pickerState.key] = { r = orig.r, g = orig.g, b = orig.b, a = orig.a }
-    end
-
-    if pickerState.swatch and pickerState.swatch.colorTex then
-        pickerState.swatch.colorTex:SetColorTexture(orig.r, orig.g, orig.b, orig.a)
-    end
-
-    AB:UpdateAllFrames()
-end
-
-local function OpenColorPicker(colorKey, swatchRef, currentColor)
-    local r, g, b, a = currentColor.r, currentColor.g, currentColor.b, currentColor.a or 1
-
-    -- Single source of truth
-    pickerState = {
+    -- Store original for cancel, and references for updates
+    activeColorPick = {
         key = colorKey,
-        swatch = swatchRef,
-        original = { r = r, g = g, b = b, a = a }
+        swatch = swatchFrame,
+        originalR = r,
+        originalG = g,
+        originalB = b,
+        originalA = a,
     }
 
-    -- Open picker (noop callbacks - we poll instead)
-    local noop = function() end
+    -- Callback: user changed color or opacity - save immediately
+    local function OnColorChanged()
+        if not activeColorPick then return end
+
+        local newR, newG, newB = ColorPickerFrame:GetColorRGB()
+        local newA = 1
+        if ColorPickerFrame.GetColorAlpha then
+            newA = ColorPickerFrame:GetColorAlpha()
+        elseif OpacitySliderFrame and OpacitySliderFrame:GetValue() then
+            newA = 1 - OpacitySliderFrame:GetValue()
+        end
+
+        -- Update config
+        local colors = AB:GetConfig("colors")
+        if colors then
+            colors[activeColorPick.key] = { r = newR, g = newG, b = newB, a = newA }
+            AB:SetConfig("colors", colors)
+        end
+
+        -- Update swatch visual
+        if activeColorPick.swatch and activeColorPick.swatch.colorTex then
+            activeColorPick.swatch.colorTex:SetColorTexture(newR, newG, newB, newA)
+        end
+    end
+
+    -- Callback: user clicked Cancel - restore original
+    local function OnCancel()
+        if not activeColorPick then return end
+
+        local origR = activeColorPick.originalR
+        local origG = activeColorPick.originalG
+        local origB = activeColorPick.originalB
+        local origA = activeColorPick.originalA
+
+        -- Restore config
+        local colors = AB:GetConfig("colors")
+        if colors then
+            colors[activeColorPick.key] = { r = origR, g = origG, b = origB, a = origA }
+            AB:SetConfig("colors", colors)
+        end
+
+        -- Restore swatch visual
+        if activeColorPick.swatch and activeColorPick.swatch.colorTex then
+            activeColorPick.swatch.colorTex:SetColorTexture(origR, origG, origB, origA)
+        end
+
+        AB:UpdateAllFrames()
+        activeColorPick = nil
+    end
+
+    -- Open the color picker with proper callbacks
     if ColorPickerFrame.SetupColorPickerAndShow then
+        -- Modern API (Dragonflight+)
         ColorPickerFrame:SetupColorPickerAndShow({
-            r = r, g = g, b = b,
+            r = r,
+            g = g,
+            b = b,
             hasOpacity = true,
-            opacity = 1 - a,
-            swatchFunc = noop,
-            opacityFunc = noop,
+            opacity = a,
+            swatchFunc = OnColorChanged,
+            opacityFunc = OnColorChanged,
             cancelFunc = OnCancel,
         })
     else
+        -- Legacy API
         ColorPickerFrame.hasOpacity = true
         ColorPickerFrame.opacity = 1 - a
+        ColorPickerFrame.func = OnColorChanged
+        ColorPickerFrame.opacityFunc = OnColorChanged
         ColorPickerFrame.cancelFunc = OnCancel
         ColorPickerFrame:SetColorRGB(r, g, b)
         ColorPickerFrame:Show()
     end
-
-    -- Start polling on next frame (avoid stale initial values)
-    C_Timer.After(0, function()
-        if pickerState then
-            pollFrame:Show()
-        end
-    end)
 end
 
 --------------------------------------------------------------------------------
