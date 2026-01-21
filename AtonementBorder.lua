@@ -597,8 +597,11 @@ SlashCmdList["ATONEMENTBORDER"] = function(msg)
         AB:Print("  Pulse enabled:", AB:GetConfig("enablePulse") and "Yes" or "No")
         AB:Print("  Border size:", AB:GetConfig("borderSize"))
         AB:Print("  Tracked frames:", AB:CountBorders())
+    elseif cmd == "options" or cmd == "config" or cmd == "settings" then
+        AB:OpenOptions()
     else
         AB:Print("Commands:")
+        AB:Print("  /ab options - Open settings panel")
         AB:Print("  /ab enable|disable|toggle - Enable/disable the addon")
         AB:Print("  /ab threshold <sec> - Set high threshold (green)")
         AB:Print("  /ab lowthreshold <sec> - Set low threshold (red)")
