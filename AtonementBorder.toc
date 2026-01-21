@@ -4,7 +4,7 @@
 ## Author: Custom
 ## Version: 1.0.0
 ## SavedVariables: AtonementBorderDB
-## IconTexture: Interface\Icons\spell_holy_atonement
+## IconTexture: Interface\Icons\ability_priest_atonement
 
 Config.lua
 AtonementBorder.lua
