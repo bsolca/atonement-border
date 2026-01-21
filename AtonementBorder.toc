@@ -1,0 +1,10 @@
+## Interface: 120000
+## Title: Atonement Border
+## Notes: Displays colored borders on unit frames based on Atonement buff duration
+## Author: Custom
+## Version: 1.0.0
+## SavedVariables: AtonementBorderDB
+## IconTexture: Interface\Icons\spell_holy_atonement
+
+Config.lua
+AtonementBorder.lua
